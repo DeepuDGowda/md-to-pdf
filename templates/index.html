@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Document Composer · Multi-Markdown → DOCX + PDF</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Tabler Icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"
+    />
+    <!-- Styles -->
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}?v=28"
+    />
+  </head>
+  <body data-server-message="{{ (server_message | default(None)) | tojson }}">
+    <div class="bg-gradient"></div>
+
+    <!-- Loader overlay -->
+    <div id="progressOverlay" class="overlay" aria-hidden="true">
+      <div class="loader-card" role="alert" aria-live="assertive">
+        <div class="spinner"></div>
+        <div class="loader-text">
+          <strong>Converting…</strong>
+          <div class="sub">We’re merging your content with the template.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header class="site-header container">
+      <div class="brand">
+        <div class="logo">DP</div>
+        <div class="meta">
+          <h1>Document Composer</h1>
+          <p>
+            Select multiple <strong>.md</strong> /
+            <strong>.mdx</strong> sections (max 20) and one template
+            <strong>.docx</strong> to produce a single polished
+            <strong>DOCX</strong> and <strong>PDF</strong>.
+          </p>
+        </div>
+      </div>
+
+      <nav class="badges">
+        <button
+          id="themeToggle"
+          class="btn ghost small-btn theme-toggle"
+          aria-pressed="false"
+          title="Toggle light / dark theme"
+        >
+          <i class="ti ti-sun"></i>
+          <span class="sr-only">Toggle theme</span>
+        </button>
+      </nav>
+    </header>
+
+    <!-- Main -->
+    <main class="container grid">
+      <!-- Upload Card -->
+      <section class="card card-upload">
+        <h2><i class="ti ti-upload"></i> Upload & Convert</h2>
+
+        <form class="form" id="convertForm" novalidate>
+          <!-- DROPZONE -->
+          <div class="upload-box">
+            <div
+              class="dropzone"
+              data-dropzone
+              title="Click to pick files or drag & drop"
+            >
+              <div class="dz-icon"><i class="ti ti-cloud-upload"></i></div>
+              <div class="dz-text">
+                <strong>Drag & drop</strong> files here, or click to browse
+                <div class="dz-note">
+                  Raw sections: <span>.md</span> · <span>.mdx</span> (multiple,
+                  max 20) · Template:
+                  <span>.docx</span>
+                </div>
+              </div>
+              <input
+                type="file"
+                id="rawMdInput"
+                accept=".md,.markdown,.mdx"
+                multiple
+                hidden
+              />
+              <input type="file" id="tplInput" accept=".docx" hidden />
+              <input
+                type="file"
+                id="comboInput"
+                accept=".md,.markdown,.mdx,.docx"
+                multiple
+                hidden
+              />
+            </div>
+          </div>
+
+          <!-- MD controls -->
+          <div class="md-controls">
+            <button
+              type="button"
+              class="btn ghost btn-md-control orange-outline"
+              id="pickRawMd"
+            >
+              <i class="ti ti-files"></i> Add Markdown Sections (.md / .mdx)
+            </button>
+
+            <div id="mdCountDisplay" class="md-count">
+              No Markdown files yet
+            </div>
+
+            <button
+              type="button"
+              class="btn ghost danger btn-md-control"
+              id="resetMd"
+            >
+              <i class="ti ti-x"></i> Reset MD
+            </button>
+          </div>
+
+          <div id="clientWarning" aria-live="polite"></div>
+
+          <div id="mdChips" class="chips visually-hidden" aria-live="polite">
+            <span class="chip muted" id="mdEmpty">No Markdown files yet</span>
+          </div>
+
+          <div id="mdList" style="margin-top: 12px"></div>
+
+          <div class="section-label"><h2>Template</h2></div>
+
+          <div class="upload-box template-box">
+            <div class="pickers pick-left">
+              <button type="button" class="btn ghost" id="pickTpl">
+                <i class="ti ti-template"></i> Choose Template (.docx)
+              </button>
+              <span class="filetag" id="tplName">No template chosen</span>
+              <button
+                type="button"
+                class="btn ghost danger"
+                id="resetTpl"
+                style="margin-left: 12px"
+              >
+                <i class="ti ti-x"></i> Reset Template
+              </button>
+            </div>
+          </div>
+
+          <div id="tplRowContainer" style="margin-top: 12px"></div>
+
+          <div class="actions">
+            <button class="btn primary" type="submit" id="convertBtn" disabled>
+              <i class="ti ti-arrows-transfer-down"></i> Convert
+            </button>
+            <button class="btn ghost" type="button" id="resetAll">
+              <i class="ti ti-eraser"></i> Reset All
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Preview Card -->
+      <section class="card card-preview" id="resultCard">
+        <div class="card-header-row">
+          <h2><i class="ti ti-checkup-list"></i> Preview</h2>
+          <div class="preview-controls">
+            {% if pdf_preview_url %}
+            <button
+              class="btn ghost"
+              onclick="window.open('{{ pdf_preview_url }}', '_blank')"
+              title="Open preview in new tab"
+              id="openPreviewTop"
+            >
+              <i class="ti ti-external-link"></i>Open
+            </button>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="result-preview" id="resultPreview">
+          {% if pdf_preview_url %}
+          <div class="preview-frame-wrap">
+            <iframe
+              class="pdf-preview-iframe"
+              id="pdfPreviewIframe"
+              src="{{ pdf_preview_url }}"
+              title="PDF Preview"
+              frameborder="0"
+            ></iframe>
+          </div>
+          {% if pdf_error_message %}
+          <div class="preview-note error">
+            <strong>Note:</strong> {{ pdf_error_message }}
+          </div>
+          {% endif %} {% elif pdf_error_message %}
+          <div class="placeholder">
+            <i class="ti ti-alert-circle"></i>
+            <p><strong>PDF Preview unavailable</strong></p>
+            <p class="small">{{ pdf_error_message }}</p>
+          </div>
+          {% else %}
+          <div class="placeholder">
+            <i class="ti ti-sparkles"></i>
+            <p>Your preview will appear here after conversion.</p>
+          </div>
+          {% endif %}
+
+          <div
+            class="result-actions"
+            style="
+              margin-top: 12px;
+              display: flex;
+              gap: 10px;
+              align-items: center;
+            "
+          >
+            {% if docx_url %}
+            <a class="btn success" href="{{ docx_url }}?download=1"
+              ><i class="ti ti-download"></i> Download DOCX</a
+            >
+            {% else %}
+            <button class="btn success btn-disabled" disabled>
+              <i class="ti ti-download"></i> Download DOCX
+            </button>
+            {% endif %} {% if pdf_url %}
+            <a class="btn success outline" href="{{ pdf_url }}?download=1"
+              ><i class="ti ti-file-type-pdf"></i> Download PDF</a
+            >
+            {% else %}
+            <button class="btn success outline btn-disabled" disabled>
+              <i class="ti ti-file-type-pdf"></i> Download PDF
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <!-- Document Details -->
+      <section class="card card-info" id="infoCard">
+        <h2><i class="ti ti-file-info"></i> Document Details</h2>
+
+        <div class="meta-box">
+          <div class="meta-box-header">Output summary</div>
+          <div class="meta-box-body">
+            <table
+              class="summary-table"
+              role="table"
+              aria-label="Output summary"
+            >
+              <tbody>
+                <tr>
+                  <td class="label">Pages</td>
+                  <td class="value">{{ total_pages or '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="label">DOCX size</td>
+                  <td class="value">{{ docx_size or '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="label">PDF size</td>
+                  <td class="value">{{ pdf_size or '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="label">Conversion time</td>
+                  <td class="value">{{ conversion_time or '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="label">Images embedded</td>
+                  <td class="value">
+                    {{ image_count or '0' }} (skipped: {{ skipped_images or '0'
+                    }})
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="meta-box source-box">
+          <div class="meta-box-header">Source sections</div>
+          <div class="meta-box-body">
+            {% if uploaded_files %}
+            <ol>
+              {% for f in uploaded_files %}
+              <li>
+                <i class="{{ f.icon }}"></i> {{ f.display_name }}
+                <small class="muted">({{ f.size_human }})</small>
+              </li>
+              {% endfor %}
+            </ol>
+            {% else %}
+            <p class="muted small">No source files recorded.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- quick-actions removed as requested -->
+      </section>
+    </main>
+
+    <footer class="container footer">
+      <div>© {{ 2025|default(2025) }} Document Composer</div>
+      <div class="links">
+        <a href="#" tabindex="-1">Terms</a><span>·</span>
+        <a href="#" tabindex="-1">Privacy</a>
+      </div>
+    </footer>
+
+    <!-- Toast container -->
+    <div
+      id="toastContainer"
+      class="toast-container"
+      aria-live="polite"
+      aria-atomic="true"
+      style="display: none"
+    ></div>
+
+    <!-- Main JS -->
+    <script
+      defer
+      src="{{ url_for('static', filename='app.js') }}?v=28"
+    ></script>
+  </body>
+</html>
